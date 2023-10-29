@@ -25,13 +25,13 @@ dotnet new webapi -n sample-app
 
   Run
   ```bash
-  dotnet add package OpenTelemetry --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.API --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.AutoInstrumentation --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.Exporter.Console --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.Extensions.Hosting --version <suitable/latest version>  
-  dotnet add package OpenTelemetry.Instrumentation.Runtime --version <suitable/latest version>
+  dotnet add package OpenTelemetry 
+  dotnet add package OpenTelemetry.API 
+  dotnet add package OpenTelemetry.AutoInstrumentation 
+  dotnet add package OpenTelemetry.Exporter.Console 
+  dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol 
+  dotnet add package OpenTelemetry.Extensions.Hosting
+  dotnet add package OpenTelemetry.Instrumentation.Runtime 
   ```
 
 ### Replace the contents
@@ -77,11 +77,15 @@ dotnet new webapi -n sample-app
                           defaultValue: "https://ingest.in.signoz.cloud:443/"));
       
                   otlpOptions.Protocol = OtlpExportProtocol.Grpc;
-                  otlpOptions.Headers = $"signoz-access-token=789008a8-0d53-4038-ac1b-e50843f7ad9f";
-      
+                   string headerKey = "signoz-access-token";
+                   string headerValue = builder.Configuration.GetValue<string>("Otlp:headers");
+
+                   string formattedHeader = $"{headerKey}={headerValue}";
+                   otlpOptions.Headers = formattedHeader;
       
               });
-      
+
+              //export telemetry data to console of the application
               b.AddConsoleExporter();
       
           });
@@ -224,9 +228,7 @@ dotnet new webapi -n sample-app
        "tls": {
          "insecure": false
        },
-       "headers": {
-         "signoz-access-token": "[ingest key]"
-       }    
+       "headers": "[ingest key]"  
      }
    }
   ```
