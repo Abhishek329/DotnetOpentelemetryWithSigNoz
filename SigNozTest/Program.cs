@@ -23,7 +23,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 Action<ResourceBuilder> configureResource = r => r.AddService(
-    serviceName: builder.Configuration.GetValue("ServiceName", defaultValue: "otel-test")!,
+    serviceName: builder.Configuration.GetValue("ServiceName", defaultValue: "sample-net-app")!,
     serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
     serviceInstanceId: Environment.MachineName);
 
@@ -50,7 +50,12 @@ builder.Services.AddLogging().AddOpenTelemetry()
                     defaultValue: "https://ingest.in.signoz.cloud:443/"));
 
             otlpOptions.Protocol = OtlpExportProtocol.Grpc;
-            otlpOptions.Headers = $"signoz-access-token=789008a8-0d53-4038-ac1b-e50843f7ad9f";
+
+            string headerKey = "signoz-access-token";
+            string headerValue = builder.Configuration.GetValue<string>("Otlp:headers");
+
+            string formattedHeader = $"{headerKey}={headerValue}";
+            otlpOptions.Headers = formattedHeader;
 
 
         });
