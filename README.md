@@ -4,111 +4,253 @@ This example uses the new WebApplication host that ships with .NET 6 and shows h
 
 # Prerequisites
 
+SigNoz should be installed in your local machine or any server. To install SigNoz follow the instructions at https://signoz.io/docs/deployment/docker/
+
 * [.Net SDK 6+](https://dotnet.microsoft.com/en-us/download/visual-studio-sdks)
 * [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
 
 The following example uses a basic Minimal API with ASP.NET Core web application.
 
-ResourceBuilder is associated with OpenTelemetry to associate the service name, version and the machine on which this program is running.
-The sample rate is set to emit all the traces using `AlwaysOnSampler`.
+## Run instructions for sending data to SigNoz
 
-## Step 1 : Create a new ASP.NET Core web API ##
-In your terminal(Powershell) go to your directory and run 
-`dotnet new webapi -n sample-app`
+- Create a new ASP.NET Core web API 
 
-## Step 2: Install Opentelemtery Packages ##
-Navigate to your sample-app directory and install the Opentelemetry NuGet Packages.
+```bash
+dotnet new webapi -n sample-app
+```
 
-*It can be done through Visual studio 2022 sample-app Solution.
-
-   Go to Tools -> NuGet Package Manager -> Manage NuGet Package for Solution
+- Install dependencies
    
-   * Browse [OpenTelemetry](https://www.nuget.org/profiles/OpenTelemetry)
-     
-      Install
-     
-           1.OpenTelemetry
-     
-           2.OpenTelemetry.API
-     
-           3.OpenTelemetry.AutoInstrumentation
-     
-           4.OpenTelemetry.Exporter.Console
-     
-           5.OpenTelemetry.Exporter.OpenTelemetryProtocol
-     
-           6.OpenTelemetry.Extensions.Hosting
-     
-           7.OpenTelemetry.Instrumentation.Runtime
-     
-OR
+  Inside your project directory 
 
-* Install it from your Powershell prompt
-  
-  Go to your project directory
-  
   Run
-  
-  *`dotnet add package OpenTelemetry --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.API --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.AutoInstrumentation --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.Exporter.Console --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.Extensions.Hosting --version <suitable/latest version>`
-  
-  *`dotnet add package OpenTelemetry.Instrumentation.Runtime --version <suitable/latest version>`
+  ```bash
+  dotnet add package OpenTelemetry --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.API --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.AutoInstrumentation --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.Exporter.Console --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.Extensions.Hosting --version <suitable/latest version>  
+  dotnet add package OpenTelemetry.Instrumentation.Runtime --version <suitable/latest version>
+  ```
 
-## Step 3 : Copy the contents
-* Copy the contents from the file Program.cs
-* Create new file called Instrumentation.cs and copy the contents.
-* Copy the contents of WeatherForecastController.cs.
-* Copy the contents of WeatherForecast.cs.
-* Inside the appsettings.json, replace the Otlp Endpoint with your cloud address and Headers with your Ingestion Key.
-   
+### Replace the contents
+  
+ - Replace the contents in the file Program.cs with the following code
+  ```
+    AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-   `"Otlp": {
-    "endpoint": "[ingest address]",
-    "tls": {
-      "insecure": false
-    },
-    "headers": {
-      "signoz-access-token": "[ingest key]"
-    }    
-  }` 
-
-## Step 4 : Run the application 
-`dotnet build`
-
-`dotnet run`
-
-## Step 5 : Run HttpGet request in Swagger
-* .Net 6+ webapi automatically installs Swagger.
-    * Run the HttpGet request from the Swagger UI
+      var builder = WebApplication.CreateBuilder(args);
       
-  If there's no swagger installed
+      // Add services to the container.
+      
+      builder.Services.AddControllers();
+      // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+      builder.Services.AddEndpointsApiExplorer();
+      builder.Services.AddSwaggerGen();
+      
+      Action<ResourceBuilder> configureResource = r => r.AddService(
+          serviceName: builder.Configuration.GetValue("ServiceName", defaultValue: "sample-net-app")!,
+          serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
+          serviceInstanceId: Environment.MachineName);
+      
+      
+      builder.Services.AddSingleton<Instrumentation>();
+      
+      builder.Services.AddLogging().AddOpenTelemetry()
+          .ConfigureResource(configureResource)
+          .WithTracing(b =>
+          {
+              b.AddSource(Instrumentation.ActivitySourceName)
+                  .SetSampler(new AlwaysOnSampler())
+                  .AddHttpClientInstrumentation()
+                  .AddAspNetCoreInstrumentation();
+      
+              builder.Services.Configure<AspNetCoreInstrumentationOptions>(
+                  builder.Configuration.GetSection("AspNetCoreInstrumentation"));
+      
+      
+              b.AddOtlpExporter(otlpOptions =>
+              {
+                  otlpOptions.Endpoint =
+                      new Uri(builder.Configuration.GetValue("Otlp:Endpoint",
+                          defaultValue: "https://ingest.in.signoz.cloud:443/"));
+      
+                  otlpOptions.Protocol = OtlpExportProtocol.Grpc;
+                  otlpOptions.Headers = $"signoz-access-token=789008a8-0d53-4038-ac1b-e50843f7ad9f";
+      
+      
+              });
+      
+              b.AddConsoleExporter();
+      
+          });
+      
+      var app = builder.Build();
+      
+      // Configure the HTTP request pipeline.
+      if (app.Environment.IsDevelopment())
+      {
+          app.UseSwagger();
+          app.UseSwaggerUI();
+      }
+      
+      app.UseHttpsRedirection();
+      
+      app.UseAuthorization();
+      
+      app.MapControllers();
+      
+      app.Run();
+
+  ```
+ 
+  - Create new file called Instrumentation.cs and copy the contents
+
+   ```
+      public class Instrumentation : IDisposable
+       {
+           internal const string ActivitySourceName = "Examples.AspNetCore";
+           internal const string MeterName = "Examples.AspNetCore";
+           private readonly Meter meter;
+   
+           public Instrumentation()
+           {
+               string? version = typeof(Instrumentation).Assembly.GetName().Version?.ToString();
+               ActivitySource = new ActivitySource(ActivitySourceName, version);
+               meter = new Meter(MeterName, version);
+               FreezingDaysCounter = meter.CreateCounter<long>("weather.days.freezing", "The number of days where the temperature is below freezing");
+           }
+   
+           public ActivitySource ActivitySource { get; }
+   
+           public Counter<long> FreezingDaysCounter { get; }
+   
+   
+   
+           public void Dispose()
+           {
+               ActivitySource.Dispose();
+               meter.Dispose();
+           }
+       }
+   ```
+ 
+ - Copy the contents int your WeatherForecastController.cs
+   
+ ```
+ private static readonly string[] Summaries = new[]
+      {
+          "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching",
+      };
+
+      private static readonly HttpClient HttpClient = new();
+
+      private readonly ILogger<WeatherForecastController> logger;
+      private readonly ActivitySource activitySource;
+      private readonly Counter<long> freezingDaysCounter;
+
+      public WeatherForecastController(ILogger<WeatherForecastController> logger, Instrumentation instrumentation)
+      {
+          this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+          ArgumentNullException.ThrowIfNull(instrumentation);
+          this.activitySource = instrumentation.ActivitySource;
+          this.freezingDaysCounter = instrumentation.FreezingDaysCounter;
+      }
+
+      [HttpGet]
+      public IEnumerable<WeatherForecast> Get()
+      {
+          using var scope = this.logger.BeginScope("{Id}", Guid.NewGuid().ToString("N"));
+
+          // Making an http call here to serve as an example of
+          // how dependency calls will be captured and treated
+          // automatically as child of incoming request.
+          var res = HttpClient.GetStringAsync("http://google.com").Result;
+
+          // Optional: Manually create an activity. This will become a child of
+          // the activity created from the instrumentation library for AspNetCore.
+          // Manually created activities are useful when there is a desire to track
+          // a specific subset of the request. In this example one could imagine
+          // that calculating the forecast is an expensive operation and therefore
+          // something to be distinguished from the overall request.
+          // Note: Tags can be added to the current activity without the need for
+          // a manual activity using Acitivty.Current?.SetTag()
+          using var activity = this.activitySource.StartActivity("calculate forecast");
+
+          var rng = new Random();
+          var forecast = Enumerable.Range(1, 5).Select(index => new WeatherForecast
+              {
+                  Date = DateTime.Now.AddDays(index),
+                  TemperatureC = rng.Next(-20, 55),
+                  Summary = Summaries[rng.Next(Summaries.Length)],
+              })
+              .ToArray();
+
+          // Optional: Count the freezing days
+          this.freezingDaysCounter.Add(forecast.Count(f => f.TemperatureC < 0));
+
+          this.logger.LogInformation(
+              "WeatherForecasts generated {count}: {forecasts}",
+              forecast.Length,
+              forecast);
+
+          return forecast;
+      }
+  ```
   
-   * Access the following URL `https://localhost:7156/WeatherForecast`
-     to generate a request trace.
+ - Replace the contents of WeatherForecast.cs with the following
 
-  Or
+ ```
+ public class WeatherForecast
+  {
+      public DateTime Date { get; set; }
+
+      public int TemperatureC { get; set; }
+
+      public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+
+      public string? Summary { get; set; }
+  }  
+ ```
+
+- Specify the OTLP endpoint to SigNoz Cloud endpoint inside your appSettings.json
   
-  * Run the following command in another terminal
-    `curl -X 'GET' \
-        'https://localhost:7156/WeatherForecast' \
-            -H 'accept: text/plain'`
+ ```json
+  {
+   "Otlp": {
+       "endpoint": "[ingest address]",
+       "tls": {
+         "insecure": false
+       },
+       "headers": {
+         "signoz-access-token": "[ingest key]"
+       }    
+     }
+   }
+  ```
+
+ - Run the application
+
+  ```bash
+   dotnet build
+   dotnet run
+  ```
+- Generate some traffic on the application
+
+  Web server will be running in the port 5000 by default. Browse `http://localhost:5000/Weatherforecast` to send requests to this local server and check the metrics and trace data at `http://ingest.in.signoz.cloud:443/`
+  
+### Troubleshooting
+
+Try refreshing with the latest time intervals on the sigNoz cloud dashboard if you dont see the service name.
+
+If you face any problem in instrumenting with OpenTelemetry, refer to docs at 
+
+https://signoz.io/docs/instrumentation
 
 
-## Step 6: Check the Signoz Cloud
-* Services section should display your newly created service
-![image](https://github.com/Abhishek329/DotnetOpentelemetryWithSigNoz/assets/29237536/e0e0491c-d78a-4b9a-9f61-26be730cced0)
 
-* On navigating to the service, details of the API request can be found
-  ![image](https://github.com/Abhishek329/DotnetOpentelemetryWithSigNoz/assets/29237536/0799d3a7-6caf-42e8-9804-c7e9cfd715e8)
 
 
   
