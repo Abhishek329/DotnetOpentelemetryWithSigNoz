@@ -4,7 +4,7 @@ This example uses the new WebApplication host that ships with .NET 6 and shows h
 
 # Prerequisites
 
-SigNoz should be installed in your local machine or any server. To install SigNoz follow the instructions at https://signoz.io/docs/deployment/docker/
+Create an account on SigNoz Cloud - https://signoz.io
 
 * [.Net SDK 6+](https://dotnet.microsoft.com/en-us/download/visual-studio-sdks)
 * [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
